@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Fast DDS transport profile for dts_vision.
+
+  The vision service runs as root while the navigation stack runs as a regular
+  user. Fast DDS must map its shared-memory data segment read-write, and the
+  segment is created with boost's default 0644 permissions, so the other user
+  is locked out and no samples are delivered. The segment mode is not
+  configurable and systemd's UMask= does not apply to it.
+
+  Dropping the shared-memory transport from this participant makes it announce
+  UDPv4 locators only, so peers fall back to UDP loopback regardless of which
+  user owns them. The navigation topics carry a few dozen bytes at a few
+  hundred hertz, so loopback cost is negligible. Other participants on the host
+  keep their own shared-memory transport; this file only affects processes
+  launched through run.sh.
+-->
+<dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+    <profiles>
+        <transport_descriptors>
+            <transport_descriptor>
+                <transport_id>dts_udpv4</transport_id>
+                <type>UDPv4</type>
+            </transport_descriptor>
+        </transport_descriptors>
+
+        <participant profile_name="dts_udp_only" is_default_profile="true">
+            <rtps>
+                <userTransports>
+                    <transport_id>dts_udpv4</transport_id>
+                </userTransports>
+                <useBuiltinTransports>false</useBuiltinTransports>
+            </rtps>
+        </participant>
+    </profiles>
+</dds>

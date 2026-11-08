@@ -1,0 +1,251 @@
+common:
+  enemy_color: red #识别颜色，只有调试时使用，比赛使用裁判系统数据
+  max_infer_num: 5 #最大识别并发数 一般不用改
+  bullet_speed: 11.0 #弹丸初速度 只有调试时使用，需要得到电控设置，比赛使用裁判系统数据，该参数影响pitch的补偿，弹丸飞行预测时间
+
+  serial:
+    enable: true #是否开串口
+    device_name: /dev/ttyACM0 #挂载路径
+    baud_rate: 115200 #不用改
+    char_size: 8
+    read_buf_size: 4096
+    serial_send_to_image_microseconds: 0
+
+  use_sim: false #是否使用仿真
+  record:
+    enable: false #是否启用录制
+  player:
+    enable: false #是否使用回放数据
+    path: /home/darwin/dts_vision/record/auto_aim/2026-04-08_00-43-38.bin
+
+  tf:
+    T_camera2gimbal:
+      t: [0.00,0.00,0.08]
+      R: [1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0]
+    T_shoot2gimbal:
+      t: [0.1,0.0,0.0]
+      R: [1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0]
+
+  wheel_odometry:
+    q_xyz: [10.0,10.0,1.0]
+    r_vxyz: [0.05,0.05,0.05]
+
+  ballistic_trajectory:
+    gravity: 9.8
+    resistance_full: 0.092  # 0.0190(大弹丸)double k1_c = 0.47; double k1 = k1_c * 1.169 * (2 * M_PI * 0.02125 * 0.02125) / 2 / 0.041;
+    compenstator_type: resistance_full
+   
+  auto_exposure: #自动曝光
+    enable: true
+    target_brightness: 35.0 #目标平均亮度，10 - 50 一般不用调
+    tolerance: 3.0
+    step_gain: 15.0
+    decay_step: 1.0
+    exposure_min: 200.0
+    exposure_max: 5500.0
+    control_interval_ms: 300
+
+  camera: 
+    type: hik #hik mv
+    hik_camera:
+      target_sn: DA2166432
+      adc_bit_depth: Bits_8
+      pixel_format: BayerRG8 #RGB8Packed
+      reverse_x: false
+      reverse_y: false
+      width: 1440
+      height: 1080
+      offset_x: 0
+      offset_y: 0
+      acquisition_frame_rate_enable: true
+      acquisition_frame_rate: 30
+      exposure_time: 1500
+      gain: 16.9
+      gamma: 0.7 #Bayer用不了
+      trigger_mode: Off
+      trigger_source: ""
+      trigger_activation: ""
+      format: "bgr" 
+      use_cuda_cvt: true
+    mv_camera:
+      frame_speed: 1 #0/1
+      exposure_time: 2000
+      analog_gain: 6.0
+      gamma: 80
+    camera_info: #相机内参
+    #6mm
+      image_width: 1440
+      image_height: 1080
+      camera_name: narrow_stereo
+      camera_matrix:
+        rows: 3
+        cols: 3
+        data: [1814.19888,    0.     ,  730.27359,
+                  0.     , 1807.37177,  529.57031,
+                  0.     ,    0.     ,    1.     ]
+      distortion_model: plumb_bob
+      distortion_coefficients:
+        rows: 1
+        cols: 5
+        data: [-0.089138, 0.114766, 0.000034, 0.000238, 0.000000]
+      rectification_matrix:
+        rows: 3
+        cols: 3
+        data: [1., 0., 0.,
+              0., 1., 0.,
+              0., 0., 1.]
+      projection_matrix:
+        rows: 3
+        cols: 4
+        data: [1793.54229,    0.     ,  730.67194,    0.     ,
+                  0.     , 1794.48784,  529.46193,    0.     ,
+                  0.     ,    0.     ,    1.     ,    0.     ]
+    #8mm
+      # image_width: 1440
+      # image_height: 1080
+      # camera_name: narrow_stereo
+      # camera_matrix:
+      #   rows: 3
+      #   cols: 3
+      #   data: [2419.64498,    0.     ,  719.05623,
+      #             0.     , 2414.38209,  538.71651,
+      #             0.     ,    0.     ,    1.     ]
+      # distortion_model: plumb_bob
+      # distortion_coefficients:
+      #   rows: 1
+      #   cols: 5
+      #   data: [-0.033521, 0.087954, -0.002045, -0.001438, 0.000000]
+      # rectification_matrix:
+      #   rows: 3
+      #   cols: 3
+      #   data: [1., 0., 0.,
+      #          0., 1., 0.,
+      #          0., 0., 1.]
+      # projection_matrix:
+      #   rows: 3
+      #   cols: 4
+      #   data: [2413.22632,    0.     ,  717.5196 ,    0.     ,
+      #             0.     , 2408.83228,  537.43444,    0.     ,
+      #             0.     ,    0.     ,    1.     ,    0.     ]
+
+armor_detector: #该参数已是最优解
+  armor_infer:
+    model_type: tup
+    conf_threshold: 0.2
+  net_detector:
+    backend: openvino
+    openvino:
+      model_path: ${ROOT_DIR}/model/opt-1208-001.onnx
+      device_name: "GPU"
+      perf_mode: "THROUGHPUT"
+      priority: "HIGH"
+      # scheduling_core_type: "PCORE_ONLY"
+      execution_mode: "PERFORMANCE"
+      infer_request_buffer_num: 10
+    tensorrt:
+      model_path: ${ROOT_DIR}/model/opt-1208-001.onnx
+      copy_context_num: 3
+      min_free_mem_ratio: 0.1
+      use_cuda_preproces: true
+  number_classifier:
+    enable: true
+    model_path: ${ROOT_DIR}/model/mlp.onnx
+    label_path: ${ROOT_DIR}/model/label.txt
+  color_classifier:
+    enable: true
+    diff_threshold: 10.0
+  cv:
+    light:
+      bin_threshold: 120.0
+      min_wh_ratio: 0.001
+      max_wh_ratio: 0.4
+      max_angle: 40.0
+    armor:
+      min_ratio: 0.8
+      max_ratio: 5.0
+
+armor_tracker:
+  lost_time_thres: 0.5
+  lost_time_thres_outpost: 2.0
+  tracking_thres: 10
+  match_gate_armor: 50.0
+  match_gate_not_all_init_armor: 100.0
+  qxyz_common: [30.0, 30.0, 1.0]
+  qyaw_common: 100.0
+  qxyz_output: [1.0, 1.0, 0.5]
+  qyaw_output: 0.01
+  q_r: 0.0000001
+  q_l: 0.0000001
+  q_h: 0.0000001
+  q_outpost_dz: 0.01
+  enable_lights_measure: true
+  light_match_length_ratio_gate: 0.2
+  light_match_angle_gate: 0.2
+  # 位置门: 两端误差之和不得超过预测灯条长度的这个倍数。5.0 时门比相邻装甲板的灯条间距还宽。
+  light_match_pos_gate_by_length_ratio: 1.5
+  # 新息门控阈值 = 该系数 × 卡方 0.999 分位数(4 维观测 18.467)。0 为关闭。
+  innovation_gate_chi2_scale: 1.0
+  r_uv_at_1m: 70.0
+  r_uv_min: 30.0
+  esekf_iter_num: 5
+
+auto_aim_fsm: #多种瞄准模式target vyaw控制阈值 single：目标速度小锁定较优板 whole： 锁定全部板 pair： 4选2 center：瞄准中心
+  single_whole_up: 1.5 
+  single_whole_down: 1.0
+  whole_pair_up: 3.5 
+  whole_pair_down: 2.5 #1s内至少换2次板子  2pi  否则轨迹规划无意义
+  pair_center_up: 16.5
+  pair_center_down: 15.0
+  transfer_time: 0.5
+
+armor_aimer:
+  base_yaw_offset: -0.0 # yaw补偿
+  base_pitch_offset: -0.2 # pitch补偿 两个都调好理论上发出弹丸会与可视化弹道重现重合，可以在没有靶车的时候临时调整
+  # base_yaw_offset: -0.0
+  # base_pitch_offset: -0.0
+  sample_total_time: 1.0
+  sample_horizon: 200
+  fire_delay_min: 0.01
+  fire_delay_max: 0.05
+  max_yaw_acc: 40
+  max_pitch_acc: 50
+  prediction_delay: 0.00
+  aim_center_more_prediction_time: 0.0
+  shooting_range_h: 0.12
+  shooting_range_w_small: 0.12
+  shooting_range_w_large: 0.24
+  min_enable_pitch_deg: 0.25
+  min_enable_yaw_deg: 0.25
+  ballistic_trajectory:
+    gravity: 9.8
+    resistance_full: 0.092 # 0.019
+    compenstator_type: resistance_full
+
+mqtt:
+  enable: true
+  server: "tcp://127.0.0.1:3333"
+  client_id: "encoder_hero"
+  topic: "CustomByteBlock"
+
+encoder:
+  # ----- 编码器参数 -----
+  fps: 30                       # 输出帧率
+  target_bitrate: 70           # 目标比特率（kbps）
+  max_packets_per_sec: 50       # 每秒最大包数（令牌桶速率）
+
+  # ----- 图像预处理参数 -----
+  crop_size: 350                # 中心裁剪区域大小
+  output_w: 300                 # 编码输出宽度
+  output_h: 300                 # 编码输出高度
+  static_simplify: true         # 开启动静分离
+  motion_threshold: 14          # 运动检测阈值
+  motion_erode_px: 2            # 腐蚀
+  motion_dilate_px: 6           # 膨胀
+  motion_trail_frames: 0        # 拖影历史帧数，0 表示关闭
+  trail_disable_motion_ratio: 0.01   # 拖影抑制运动比例阈值
+  bg_update_alpha: 0.01         # 背景更新速度
+  bg_blur_sigma: 0.1            # 静态模糊强度
+  center_clear_size: 200        # 中心保护区域尺寸
+  force_monochrome: false        # 仅中心保留彩色
+
+    

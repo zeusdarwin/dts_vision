@@ -1,0 +1,142 @@
+{% macro icon(name, class_name='') -%}
+<svg class="icon {{ class_name }}" aria-hidden="true"><use href="{{ url_for('static', filename='icons.svg') }}#{{ name }}"></use></svg>
+{%- endmacro %}
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#edf2f4" />
+    <title>DTS自瞄</title>
+    <link rel="icon" href="{{ url_for('static', filename='ry.png') }}" type="image/png" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20261015-suncloud-6') }}" />
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script defer src="{{ url_for('static', filename='js/chart_logic.js', v='20261015-suncloud-4') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/json_view.js', v='20261015-suncloud-4') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/main.js', v='20261015-suncloud-4') }}"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-grid">跳至调试面板</a>
+    <header id="header">
+      <img class="brand-image" src="{{ url_for('static', filename='ry.JPG') }}" alt="DTS" width="52" height="52" />
+      <div class="header-copy">
+        <h1>DTS自瞄</h1>
+        <p>{{ server_url }}</p>
+      </div>
+      <nav class="header-nav" aria-label="面板导航">
+        <a href="#video-panel">{{ icon('video') }}实时画面</a>
+        <a href="#main-chart-panel">{{ icon('chart-line') }}数据曲线</a>
+        <a href="#json-info">{{ icon('braces') }}运行日志</a>
+      </nav>
+      <div class="header-status" aria-label="连接状态">
+        <span id="data-status" class="status-pill" role="status" data-label="数据">数据 · 等待连接</span>
+        <span id="log-status" class="status-pill" role="status" data-label="日志">日志 · 等待连接</span>
+      </div>
+    </header>
+
+    <main id="video-tab">
+      <section id="main-grid" aria-label="调试面板">
+        <article class="panel" id="video-panel">
+          <div class="panel-title">
+            {{ icon('video') }}
+            <h2>实时画面</h2>
+            <span class="stream-state" id="video-status" role="status">等待画面</span>
+          </div>
+          <div class="video-container">
+            <div class="video-wall">
+              <div class="video-tile">
+                <span class="video-tile-label">主相机</span>
+                <div class="video-empty">{{ icon('cloud-sun', 'weather-art') }}<p>等待相机信号</p><span>相机帧接入后将在这里显示实时画面</span></div>
+                <img src="{{ url_for('video_feed') }}" alt="主相机视频流" id="video-stream" decoding="async" />
+              </div>
+              {% if show_omni %}<div class="video-tile">
+                <span class="video-tile-label">Omni 0</span>
+                <div class="video-empty">{{ icon('cloud-sun', 'weather-art') }}<p>等待相机信号</p><span>相机帧接入后将在这里显示实时画面</span></div>
+                <img src="{{ url_for('omni0_video_feed') }}" alt="Omni 0 视频流" id="omni0-stream" decoding="async" />
+              </div>
+              <div class="video-tile">
+                <span class="video-tile-label">Omni 1</span>
+                <div class="video-empty">{{ icon('cloud-sun', 'weather-art') }}<p>等待相机信号</p><span>相机帧接入后将在这里显示实时画面</span></div>
+                <img src="{{ url_for('omni1_video_feed') }}" alt="Omni 1 视频流" id="omni1-stream" decoding="async" />
+              </div>
+              {% endif %}
+            </div>
+            <button class="icon-btn fullscreen-btn" type="button" id="fullscreenBtn" title="全屏" aria-label="全屏" aria-pressed="false">
+              {{ icon('maximize') }}
+            </button>
+          </div>
+          <div class="panel-footer"><span>{{ icon('video') }}多相机视野</span><span>主相机 / Omni 0 / Omni 1</span></div>
+        </article>
+
+        <article class="panel" id="json-info">
+          <div class="panel-title">
+            {{ icon('braces') }}
+            <h2>运行日志</h2>
+            <span class="muted">实时</span>
+          </div>
+          <div class="json-container" id="json-log-container">
+            <div id="json-log">
+              <div class="empty-state">
+                {{ icon('braces') }}
+                <p>等待日志数据</p><span>运行信息接入后将在这里实时更新</span>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel" id="main-chart-panel">
+          <div class="panel-title">
+            {{ icon('chart-line') }}
+            <h2>数据总览</h2>
+            <label class="toggle-line">
+              <input type="checkbox" id="multiLineChart" role="switch" checked />
+              <span>总图</span>
+            </label>
+          </div>
+          <div class="chart-toolbar">
+            <div class="chart-select-controls" id="chartSelectControls" aria-label="显示的曲线">
+              <label><input type="checkbox" data-key="yaw" checked /> Yaw</label>
+              <label><input type="checkbox" data-key="pitch" checked /> Pitch</label>
+              <label><input type="checkbox" data-key="target_yaw" /> Target Yaw</label>
+              <label><input type="checkbox" data-key="target_pitch" /> Target Pitch</label>
+              <label><input type="checkbox" data-key="gimbal_yaw" checked /> Gimbal Yaw</label>
+              <label><input type="checkbox" data-key="gimbal_pitch" checked /> Gimbal Pitch</label>
+              <label><input type="checkbox" data-key="control_v_yaw" /> Control V Yaw</label>
+              <label><input type="checkbox" data-key="control_v_pitch" /> Control V Pitch</label>
+              <label><input type="checkbox" data-key="control_a_yaw" /> Control A Yaw</label>
+              <label><input type="checkbox" data-key="control_a_pitch" /> Control A Pitch</label>
+              <label><input type="checkbox" data-key="fly_time" /> Fly Time</label>
+              <label><input type="checkbox" data-key="target_v_yaw" /> Target V Yaw</label>
+              <label><input type="checkbox" data-key="target_v_roll" /> Target V Roll</label>
+              <label><input type="checkbox" data-key="rune_a_diff" /> Rune A Diff</label>
+              <label><input type="checkbox" data-key="rune_w_diff" /> Rune W Diff</label>
+              <label><input type="checkbox" data-key="yaw_diff" /> Yaw Diff</label>
+              <label><input type="checkbox" data-key="pitch_diff" /> Pitch Diff</label>
+              <label><input type="checkbox" data-key="enable_yaw_diff" /> Enable Yaw Diff</label>
+              <label><input type="checkbox" data-key="enable_pitch_diff" /> Enable Pitch Diff</label>
+            </div>
+            <div class="range-row">
+              <label for="mainMaxPts">最大点数</label>
+              <input type="number" id="mainMaxPts" value="100" min="10" max="1000" step="10" />
+              <button type="button" id="applyMainRange">{{ icon('check') }}应用</button>
+            </div>
+          </div>
+          <div class="main-chart-wrap">
+            <canvas id="mainChart" role="img" aria-label="所选数据的总览曲线"></canvas>
+            <div class="chart-empty" id="chart-empty">等待曲线数据</div>
+          </div>
+        </article>
+
+        <article class="panel" id="individual-chart-panel">
+          <div class="panel-title">
+            {{ icon('activity') }}
+            <h2>独立曲线</h2>
+            <span class="muted" id="series-count">4 项</span>
+          </div>
+          <div id="individualCharts"></div>
+        </article>
+      </section>
+      <footer class="workspace-footer"><span>{{ icon('cloud-sun') }}DTS VISION</span><span>在每一次观察中，离精准更近一步。</span></footer>
+    </main>
+  </body>
+</html>

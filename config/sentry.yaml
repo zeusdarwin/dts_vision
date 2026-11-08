@@ -1,0 +1,449 @@
+common:  
+  mode: auto_aim
+  enemy_color: blue
+  bullet_speed: 21.0
+  navigation:
+    enable: true # Enable with BUILD_WITH_NAV_ROS2; replaces direct serial I/O.
+    feedback_timeout_ms: 500.0
+
+  serial:
+    enable: true
+    device_name: /dev/ttyACM0
+    baud_rate: 115200
+    char_size: 8
+    read_buf_size: 4096
+    serial_send_to_image_microseconds: 2000
+  
+  use_sim: false
+  record:
+    enable: false
+  player:
+    enable: false #是否使用回放数据
+    path: /home/darwin/dts_vision/record/auto_aim/2026-04-08_00-43-38.bin
+
+  tf:
+    T_camera2gimbal:
+      t: [0.12145,0.00008,0.01429]
+      R: [1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0]
+    T_shoot2gimbal:
+      t: [0.20622,0.00008,-0.07085]
+      R: [1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0]
+      
+    T_omin02big_yaw: #左，绕z轴120.09°
+      t: [-0.25948, 0.13338, -0.21014]
+      R: [-0.50127, -0.865290, 0.0, 0.86529, -0.50127, 0.0, 0.0, 0.0, 1.0]
+    T_omin12big_yaw: #右，绕z轴240°
+      t: [-0.25445, -0.21417, -0.21011]
+      R: [-0.5, 0.866025, 0.0, -0.866025, -0.5, 0.0, 0.0, 0.0, 1.0]
+
+  wheel_odometry:
+    q_xyz: [10.0,10.0,1.0]
+    r_vxyz: [0.05,0.05,0.05]
+
+  ballistic_trajectory:
+      gravity: 9.8
+      resistance: 0.092  # 0.0190(大弹丸)double k1_c = 0.47; double k1 = k1_c * 1.169 * (2 * M_PI * 0.02125 * 0.02125) / 2 / 0.041;
+      compenstator_type: resistance
+    
+  auto_exposure:
+    enable: true
+    target_brightness: 35.0
+    tolerance: 3.0
+    step_gain: 15.0
+    decay_step: 1.0
+    exposure_min: 200.0
+    exposure_max: 3000.0
+    control_interval_ms: 300
+
+  camera: 
+    type: mv #hik mv
+    hik_camera:
+      target_sn: DA2166432
+      adc_bit_depth: Bits_8
+      pixel_format: BayerRG8 #RGB8Packed
+      reverse_x: false
+      reverse_y: false
+      width: 1440
+      height: 1080
+      offset_x: 0
+      offset_y: 0
+      acquisition_frame_rate_enable: true
+      acquisition_frame_rate: 30
+      exposure_time: 2000
+      gain: 16
+      gamma: 0.7 #Bayer用不了
+      trigger_mode: Off
+      trigger_source: ""
+      trigger_activation: ""
+      format: "bgr" 
+      use_cuda_cvt: true
+    mv_camera:
+      frame_speed: 2 #0/1
+      exposure_time: 2000
+      analog_gain: 50.0
+      gamma: 80
+      # 白平衡。auto_wb: true = 交给 SDK 连续自动白平衡; 当前这台 MVSUA134GC 的
+      # bAutoWb = 0, 不支持自动, 会退化成"沿用相机 Camera/Data/*.mvdat 里存的增益",
+      # 和 sp_vision_25 的行为一致。启动日志里会打出能力位和实际生效的增益。
+      # auto_wb: false 则是手动: 给了下面三个增益就下发(单位 100 = 1.0x),
+      # 没给且 wb_once: true 就对着当前画面做一次白平衡(需要画面里有中性灰/白)。
+      # 注意三个增益都填 100 等于把白平衡钉死在 1.0x, RGGB 绿像素更多、响应更高,
+      # 画面就会明显偏绿 —— 之前 web 画面发绿就是这个原因。
+      auto_wb: true
+      wb_once: true
+      use_cuda_cvt: true
+    camera_info: #相机内参
+    #6mm
+      image_width: 1280
+      image_height: 1024
+      camera_name: narrow_stereo
+      camera_matrix:
+        rows: 3
+        cols: 3
+        data: [1976.6251452195008, 0.0, 611.2558843126983, 0.0, 1976.6769338553584, 502.8528397476406, 0.0, 0.0, 1.0]
+      distortion_model: plumb_bob
+      distortion_coefficients:
+        rows: 1
+        cols: 5
+        data: [-0.48973728707045877, 0.23963718273927775, 0.002143622290780277, 0.00017764556077986738, 0.0]
+      rectification_matrix:
+        rows: 3
+        cols: 3
+        data: [1., 0., 0.,
+              0., 1., 0.,
+              0., 0., 1.]
+      projection_matrix:
+        rows: 3
+        cols: 4
+        data: [1867.5362548828125, 0.0, 607.4670925349274, 0.0, 0.0, 1907.5247802734375, 502.67798384405614, 0.0, 0.0, 0.0, 1.0, 0.0]
+    #8mm
+      # image_width: 1440
+      # image_height: 1080
+      # camera_name: narrow_stereo
+      # camera_matrix:
+      #   rows: 3
+      #   cols: 3
+      #   data: [2419.64498,    0.     ,  719.05623,
+      #             0.     , 2414.38209,  538.71651,
+      #             0.     ,    0.     ,    1.     ]
+      # distortion_model: plumb_bob
+      # distortion_coefficients:
+      #   rows: 1
+      #   cols: 5
+      #   data: [-0.033521, 0.087954, -0.002045, -0.001438, 0.000000]
+      # rectification_matrix:
+      #   rows: 3
+      #   cols: 3
+      #   data: [1., 0., 0.,
+      #          0., 1., 0.,
+      #          0., 0., 1.]
+      # projection_matrix:
+      #   rows: 3
+      #   cols: 4
+      #   data: [2413.22632,    0.     ,  717.5196 ,    0.     ,
+      #             0.     , 2408.83228,  537.43444,    0.     ,
+      #             0.     ,    0.     ,    1.     ,    0.     ]
+
+armor_detector:
+  max_infer_num: 5
+  backend: openvino
+  net_detector:
+    openvino:
+      model_path: ${ROOT_DIR}/model/opt-1208-001.onnx
+      device_name: "GPU"
+      perf_mode: "THROUGHPUT"
+      priority: "HIGH"
+      # scheduling_core_type: "PCORE_ONLY"
+      execution_mode: "PERFORMANCE"
+      infer_request_buffer_num: 10
+    tensorrt:
+      model_path: ${ROOT_DIR}/model/opt-1208-001.onnx
+      copy_context_num: 3
+      min_free_mem_ratio: 0.1
+      use_cuda_preproces: true
+    armor_infer:
+      model_type: tup
+      conf_threshold: 0.2
+  number_classifier:
+    enable: true
+    model_path: ${ROOT_DIR}/model/mlp.onnx
+    label_path: ${ROOT_DIR}/model/label.txt
+  color_classifier:
+    enable: true
+    diff_threshold: 20.0
+  cv:
+    light:
+      bin_threshold: 120.0
+      net_ref_threshold_tol: 50.0
+      min_wh_ratio: 0.001
+      max_wh_ratio: 0.4
+      max_angle: 40.0
+    armor:
+      min_ratio: 0.8
+      max_ratio: 5.0
+
+armor_tracker:
+  lost_time_thres: 1.5
+  lost_time_thres_outpost: 2.0
+  tracking_thres: 3
+  qxyz_common: [30.0, 30.0, 1.0]
+  qyaw_common: 30.0
+  qxyz_output: [1.0, 1.0, 1.0]
+  qyaw_output: 0.01
+  q_r: 0.0000001
+  q_l: 0.0000001
+  q_h: 0.0000001
+  q_wpr: 0.0000001
+  q_outpost_dz: 0.0000001
+  enable_lights_measure: true
+  armor_match_gate: 1300.0
+  armor_match_gate_not_all_init: 1000.0
+  armor_match_w_center_err: 5.0
+  armor_match_w_angle_err: 10.0
+  armor_match_w_side_length_err: 1.0
+  light_match_length_ratio_gate: 0.2
+  light_match_angle_gate: 0.2
+  # 位置门: 两端误差之和不得超过预测灯条长度的这个倍数。5.0 时门比相邻装甲板的灯条间距还宽。
+  light_match_pos_gate_by_length_ratio: 1.5
+  # 新息门控阈值 = 该系数 × 卡方 0.999 分位数(4 维观测 18.467)。0 为关闭。
+  innovation_gate_chi2_scale: 1.0
+  r_sigma_px_by_length_ratio: 0.2
+  r_sigma_length_by_length_ratio: 0.5
+  r_sigma_angle: 0.5
+  r_sigma_armor_lights_depth_diff: 0.1
+  esekf_iter_num: 5
+
+auto_aim_fsm:
+  single_whole_up: 1.5 
+  single_whole_down: 1.0
+  whole_pair_up: 10.5 
+  whole_pair_down: 9.5 #1s内至少换2次板子  2pi  否则轨迹规划无意义
+  pair_center_up: 16.5
+  pair_center_down: 15.0
+  transfer_time: 0.5
+
+armor_aimer:
+  type: limit #limit/mpc
+  base_yaw_offset: -0.15
+  base_pitch_offset: -0.6
+  # base_yaw_offset: -0.0
+  # base_pitch_offset: -0.0
+  sample_total_time: 1.0
+  sample_horizon: 200
+  fire_delay_min: 0.005
+  fire_delay_max: 0.025
+  max_yaw_acc: 20
+  max_pitch_acc: 25
+  prediction_delay: 0.00
+  aim_center_more_prediction_time: 0.0
+  shooting_range_h: 0.12
+  shooting_range_w_small: 0.12
+  shooting_range_w_large: 0.24
+  min_enable_pitch_deg: 0.25
+  min_enable_yaw_deg: 0.25
+  ballistic_trajectory:
+    gravity: 9.8
+    resistance: 0.092  # 0.0190(大弹丸)double k1_c = 0.47; double k1 = k1_c * 1.169 * (2 * M_PI * 0.02125 * 0.02125) / 2 / 0.041;
+    compenstator_type: resistance
+   
+rune_detector:
+  max_infer_num: 5
+  backend: openvino
+  net_detector:
+    openvino:
+      model_path: ${ROOT_DIR}/model/cb_rune.onnx
+      device_name: "GPU"
+      perf_mode: "THROUGHPUT"
+      priority: "HIGH"
+      # scheduling_core_type: "PCORE_ONLY"
+      execution_mode: "PERFORMANCE"
+      infer_request_buffer_num: 10
+    tensorrt:
+      model_path: ${ROOT_DIR}/model/cb_rune.onnx
+      copy_context_num: 3
+      min_free_mem_ratio: 0.1
+      use_cuda_preproces: true
+    rune_infer:
+      model_type: cb
+      conf_threshold: 0.2
+  cv:
+    bin_threshold: 70
+    color_diff_thresh: 10
+    rune_r_min_area: 1
+    rune_r_max_area: 999999999
+    rune_r_1x1ratio_tol: 0.7
+    rune_r_fill_ratio_min: 0.1
+    rune_pan_min_area: 10
+    rune_pan_max_area: 99999999
+    rune_pan_cluster_radius: 70
+    rune_pan_max_square_ratio: 1.3
+
+rune_tracker:
+  lost_time_thres: 2.0
+  tracking_thres: 10
+  esekf_iter_num: 5
+  q_xyz: [0.0001, 0.0001, 0.0001]
+  q_yaw: 0.1
+  q_roll: 10.0
+  q_a: 0.00001
+  q_w: 0.00001
+  q_tau: 0.000001
+  match_gate: 50.0
+  voter_state_need_count: 50
+  voter_mode_need_count: 20
+  big_args_continue_time: 1.0
+  r_sigma_pix_by_hand_length_ratio_cv: 0.05
+  r_sigma_pix_by_hand_length_ratio_net: 0.2
+
+rune_aimer:
+  base_yaw_offset: -0.0
+  base_pitch_offset: -0.5
+  sample_total_time: 0.5
+  sample_horizon: 3
+  prediction_delay: -0.00
+  max_yaw_acc: 30
+  max_pitch_acc: 30
+  shooting_range_h: 0.12
+  shooting_range_w: 0.12
+  min_enable_pitch_deg: 0.25
+  min_enable_yaw_deg: 0.25
+  ballistic_trajectory:
+    gravity: 9.8
+    resistance: 0.092  # 0.0190(大弹丸)double k1_c = 0.47; double k1 = k1_c * 1.169 * (2 * M_PI * 0.02125 * 0.02125) / 2 / 0.041;
+    compenstator_type: resistance
+
+armor_omni:
+  fps: 60.0
+  max_infer_num: 3
+  armor_detector:
+    backend: openvino
+    net_detector:
+      backend: openvino
+      openvino:
+        model_path: ${ROOT_DIR}/model/opt-1208-001.onnx
+        device_name: "GPU"
+        perf_mode: "THROUGHPUT"
+        priority: "HIGH"
+        # scheduling_core_type: "PCORE_ONLY"
+        execution_mode: "PERFORMANCE"
+        infer_request_buffer_num: 10
+      tensorrt:
+        model_path: ${ROOT_DIR}/model/opt-1208-001.onnx
+        copy_context_num: 3
+        min_free_mem_ratio: 0.1
+        use_cuda_preproces: true
+      armor_infer:
+        model_type: tup
+        conf_threshold: 0.2
+    number_classifier:
+      enable: true
+      model_path: ${ROOT_DIR}/model/mlp.onnx
+      label_path: ${ROOT_DIR}/model/label.txt
+    color_classifier:
+      enable: true
+      diff_threshold: 20.0
+    cv:
+      light:
+        bin_threshold: 120.0
+        net_ref_threshold_tol: 50.0
+        min_wh_ratio: 0.001
+        max_wh_ratio: 0.4
+        max_angle: 40.0
+      armor:
+        min_ratio: 0.8
+        max_ratio: 5.0
+        
+  armor_tracker:
+    lost_time_thres: 0.5
+    lost_time_thres_outpost: 2.0
+    tracking_thres: 2
+    armor_match_gate: 300.0
+    armor_match_gate_not_all_init: 10000.0
+    armor_match_w_center_err: 5.0
+    armor_match_w_angle_err: 10.0
+    armor_match_w_side_length_err: 1.0
+    qxyz_common: [20.0, 20.0, 1.0]
+    qyaw_common: 10.0
+    qxyz_output: [10.0, 10.0, 0.5]
+    qyaw_output: 0.01
+    q_r: 0.0000001
+    q_h: 0.0000001
+    q_wpr: 0.0000001
+    q_outpost_dz: 0.5
+    r_sigma_px_by_length_ratio: 0.2
+    r_sigma_length_by_length_ratio: 0.5
+    r_sigma_angle: 0.5
+    r_sigma_armor_lights_depth_diff: 0.1
+    enable_lights_measure: true
+    light_match_length_ratio_gate: 0.2
+    light_match_angle_gate: 0.2
+    # 位置门: 两端误差之和不得超过预测灯条长度的这个倍数。5.0 时门比相邻装甲板的灯条间距还宽。
+    light_match_pos_gate_by_length_ratio: 1.5
+    # 新息门控阈值 = 该系数 × 卡方 0.999 分位数(4 维观测 18.467)。0 为关闭。
+    innovation_gate_chi2_scale: 1.0
+    esekf_iter_num: 1
+
+  camera0:  # 左摄像头
+    uvc_camera:
+      device_name: "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:4:1.0-video-index0"
+      fps: 30
+      width: 1280
+      height: 720
+      exposure: 50
+      gain: 10.0
+      gamma: 100
+    camera_info:
+      image_width: 1280
+      image_height: 720
+      camera_name: narrow_stereo
+      camera_matrix:
+        rows: 3
+        cols: 3
+        data: [808.3654716440291, 0.0, 600.0196792849656, 0.0, 804.9564994158654, 343.4851610277539, 0.0, 0.0, 1.0]
+      distortion_model: plumb_bob
+      distortion_coefficients:
+        rows: 1
+        cols: 5
+        data: [0.012270572277197201, -0.03582919428111999, 0.0018159873653261047, 0.0017220580581595593, 0.0]
+      rectification_matrix:
+        rows: 3
+        cols: 3
+        data: [1., 0., 0.,
+              0., 1., 0.,
+              0., 0., 1.]
+      projection_matrix:
+        rows: 3
+        cols: 4
+        data: [802.4429321289062, 0.0, 600.5318153835105, 0.0, 0.0, 805.2928466796875, 343.92838524876424, 0.0, 0.0, 0.0, 1.0, 0.0]
+  camera1:  # 右摄像头
+    uvc_camera:
+      device_name: "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:10:1.0-video-index0"
+      fps: 30
+      width: 1280
+      height: 720
+      exposure: 50
+      gain: 10.0
+      gamma: 100
+    camera_info:
+      image_width: 1280
+      image_height: 720
+      camera_name: narrow_stereo
+      camera_matrix:
+        rows: 3
+        cols: 3
+        data: [803.2692956763391, 0.0, 603.9871999783168, 0.0, 802.6372783387109, 368.43384590961483, 0.0, 0.0, 1.0]
+      distortion_model: plumb_bob
+      distortion_coefficients:
+        rows: 1
+        cols: 5
+        data: [0.02946366730992068, -0.046223503700527836, 0.00011545848657482876, -0.0037189706035382127, 0.0]
+      rectification_matrix:
+        rows: 3
+        cols: 3
+        data: [1., 0., 0.,
+              0., 1., 0.,
+              0., 0., 1.]
+      projection_matrix:
+        rows: 3
+        cols: 4
+        data: [801.19189453125, 0.0, 596.2010130484414, 0.0, 0.0, 807.4365844726562, 368.023143647446, 0.0, 0.0, 0.0, 1.0, 0.0]
