@@ -39,31 +39,26 @@ public:
 
     void add_edge(FrameEnum parent, FrameEnum child) {
         std::lock_guard<std::mutex> lock(path_cache_mutex_);
-        if (!valid_frame(parent) || !valid_frame(child)) {
+        if (!valid_frame(parent) || !valid_frame(child)) {// 父，子坐标系是否有效
             if constexpr (Static) {
-                throw std::out_of_range(
-                    "Invalid TF edge " + frame_to_string(parent) + " -> " + frame_to_string(child)
-                );
+                throw std::out_of_range("Invalid TF edge " + frame_to_string(parent) + " -> " + frame_to_string(child));
             } else {
                 return;
             }
         }
         if (has_direct_edge(parent, child))
             return;
-
         edges_.push_back({ parent, child });
-        adjacency_[to_index(parent)].push_back(child);
+        adjacency_[to_index(parent)].push_back(child);// 建立坐标系连接
         adjacency_[to_index(child)].push_back(parent);
-        directed_edge_[to_index(parent)][to_index(child)] = true;
+        directed_edge_[to_index(parent)][to_index(child)] = true;// 标记有向边
         path_cache_ = {};
     }
 
     bool push(FrameEnum parent, FrameEnum child, const TimePoint& t, const ISO3& pose_in_parent) {
         if (!valid_frame(parent) || !valid_frame(child)) {
             if constexpr (Static) {
-                throw std::out_of_range(
-                    "Invalid TF edge " + frame_to_string(parent) + " -> " + frame_to_string(child)
-                );
+                throw std::out_of_range("Invalid TF edge " + frame_to_string(parent) + " -> " + frame_to_string(child));
             } else {
                 return false;
             }
@@ -71,10 +66,7 @@ public:
 
         if (!has_direct_edge(parent, child)) {
             if constexpr (Static) {
-                throw std::runtime_error(
-                    "Attempt to push pose for undefined edge " + frame_to_string(parent) + " -> "
-                    + frame_to_string(child)
-                );
+                throw std::runtime_error("Attempt to push pose for undefined edge " + frame_to_string(parent) + " -> " + frame_to_string(child));
             } else {
                 return false;
             }
@@ -140,24 +132,25 @@ public:
 
 private:
     std::array<std::array<LinkBuffer, N>, N> buffers_;
-    std::vector<Edge<FrameEnum>> edges_;
+    std::vector<Edge<FrameEnum>> edges_;// 存储边
     std::array<std::vector<FrameEnum>, N> adjacency_;
     std::array<std::array<bool, N>, N> directed_edge_ {};
+    // 坐标系路径缓存，每个std::optional初始化为空状态，第一层std::array放N个起点，第二层std::array放N个std::optional<std::vector<FrameEnum>>，是N条可能存在的路径(因为有N个终点)
     mutable std::array<std::array<std::optional<std::vector<FrameEnum>>, N>, N> path_cache_ {};
     mutable std::mutex path_cache_mutex_;
 
-    bool has_direct_edge(FrameEnum A, FrameEnum B) const {
+    bool has_direct_edge(FrameEnum A, FrameEnum B) const {// 判断是否已经建立坐标系联系
         return valid_frame(A) && valid_frame(B) && directed_edge_[to_index(A)][to_index(B)];
     }
 
-    static size_t to_index(FrameEnum frame) {
+    static size_t to_index(FrameEnum frame_enum) {
         using Underlying = std::underlying_type_t<FrameEnum>;
-        return static_cast<size_t>(static_cast<Underlying>(frame));
+        return static_cast<size_t>(static_cast<Underlying>(frame_enum));
     }
 
-    static bool valid_frame(FrameEnum frame) {
+    static bool valid_frame(FrameEnum frame_enum) {
         using Underlying = std::underlying_type_t<FrameEnum>;
-        auto value = static_cast<Underlying>(frame);// int
+        auto value = static_cast<Underlying>(frame_enum);// int
         if constexpr (std::is_signed_v<Underlying>) {
             if (value < 0)
                 return false;
@@ -165,9 +158,9 @@ private:
         return static_cast<size_t>(value) < N;
     }
 
-    static std::string frame_to_string(FrameEnum frame) {
+    static std::string frame_to_string(FrameEnum frame_enum) {// 是序号
         using Underlying = std::underlying_type_t<FrameEnum>;
-        return std::to_string(static_cast<Underlying>(frame));
+        return std::to_string(static_cast<Underlying>(frame_enum));
     }
 
     std::optional<std::vector<FrameEnum>> find_path(FrameEnum start, FrameEnum goal) const {

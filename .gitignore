@@ -31,3 +31,6 @@ bin
 
 Camera
 output
+
+# ROS package runtime logs
+**/log/
