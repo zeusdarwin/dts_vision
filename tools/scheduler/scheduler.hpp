@@ -23,11 +23,11 @@ namespace dts_vision::tools::Scheduler {
 class Scheduler {
 public:
     using clock = std::chrono::steady_clock;
-    inline static unsigned int __hardware_concurrency = std::thread::hardware_concurrency();
+    inline static unsigned int hardware_concurrency_ = std::thread::hardware_concurrency();// 当前系统支持的硬件线程数
 
-    explicit Scheduler(size_t threads = __hardware_concurrency):
-        worker_count(threads ? threads : 1),
-        arena_(static_cast<int>(worker_count)) {}
+    explicit Scheduler(size_t threads = hardware_concurrency_):
+        worker_count_(threads ? threads : 1),
+        arena_(static_cast<int>(worker_count_)) {}
 
     ~Scheduler() {
         stop();
@@ -234,7 +234,7 @@ private:
     }
 
 private:
-    size_t worker_count;
+    size_t worker_count_;
     tbb::task_arena arena_;
 
     std::unordered_map<std::type_index, std::vector<NodeBase::Ptr>> static_tasks_snapshot_;

@@ -36,7 +36,7 @@ static std::vector<std::type_index> make_type_index_vec() {
 struct NodeBase {
     using Ptr = std::shared_ptr<NodeBase>;
 
-    NodeKind kind { NodeKind::Task };
+    NodeKind kind { NodeKind::Task };// 节点类型
     std::string name;
     int connected_count { 0 };
     virtual ~NodeBase() = default;

@@ -13,7 +13,7 @@ struct TimedPose {// 时间戳+位姿
     ISO3 pose;
 };
 
-class TimePoseBuffer {
+class TimePoseBuffer {// 时间戳+位姿的缓冲区
 public:
     explicit TimePoseBuffer(size_t max_size = 1024): max_size_(max_size) {}// 构造函数，禁止隐式转换
 
@@ -32,7 +32,7 @@ public:
     }
 
     ISO3 get(const TimePoint& t) const {
-        std::shared_lock<std::shared_mutex> lock(mutex_);
+        std::shared_lock<std::shared_mutex> lock(mutex_);// 读取时加锁，只读可以共享
 
         if (buffer_.empty())
             return ISO3::Identity();
@@ -44,10 +44,10 @@ public:
             buffer_.begin(),
             buffer_.end(),
             t,
-            [](const TimedPose& p, const TimePoint& t) { return p.stamp < t; }
+            [](const TimedPose& timed_pose, const TimePoint& t) { return timed_pose.stamp < t; }
         );
 
-        if (it == buffer_.begin()) {
+        if (it == buffer_.begin()) {// 处理t比buffer_里所有元素的时间戳都要早的情况
             // std::cout << "its begin" << std::endl;
             return it->pose;
         }
@@ -66,11 +66,11 @@ public:
 
         double r = std::clamp(seconds(t - p1.stamp) / dt, 0.0, 1.0);
 
-        Vec3 trans = (1 - r) * p1.pose.translation() + r * p2.pose.translation();
+        Vec3 trans = (1 - r) * p1.pose.translation() + r * p2.pose.translation();// p_1+r*(p_2-p_1) = (1-r)*p_1+r*p_2
         Quaternion q1(p1.pose.rotation());
         Quaternion q2(p2.pose.rotation());
         normalize_pair(q1, q2);
-        Quaternion q = q1.slerp(r, q2).normalized();
+        Quaternion q = q1.slerp(r, q2).normalized();// 在两个四元数q1和q2之间按比例r做球面插值
 
         ISO3 T = ISO3::Identity();
         T.linear() = q.toRotationMatrix();
@@ -80,14 +80,14 @@ public:
 
 private:
     static constexpr double kMinDt = 1e-6;
-    static constexpr double kMinOmega = 1e-9;
+    static constexpr double kMinW = 1e-9;
 
     template<typename Duration>
     static double seconds(const Duration& duration) {
         return std::chrono::duration<double>(duration).count();// 将时间间隔转换为秒
     }
 
-    static void normalize_pair(Quaternion& q1, Quaternion& q2) {
+    static void normalize_pair(Quaternion& q1, Quaternion& q2) {// 归一化，处理双覆盖
         q1.normalize();
         q2.normalize();
         if (q1.dot(q2) < 0.0)
@@ -104,7 +104,7 @@ private:
         double dt = seconds(p2.stamp - p1.stamp);
         if (dt < kMinDt)
             return p2.pose;// dt太小，没必要沿着轨迹外推
-
+        // dt比较大，说明点比较分散，就要沿轨迹外推了
         double dt_future = seconds(t - p2.stamp);
 
         Vec3 v = (p2.pose.translation() - p1.pose.translation()) / dt;// [v_x, v_y, v_z]
@@ -113,23 +113,23 @@ private:
         Quaternion q1(p1.pose.rotation());
         Quaternion q2(p2.pose.rotation());
         normalize_pair(q1, q2);
-        Quaternion dq = q1.inverse() * q2;
+        Quaternion dq = q1.inverse() * q2;// 因为q1*dq=q2，所以q1^-1*q1*dq=dq=q1^{-1}*q2
         dq.normalize();
 
         AngleAxis aa(dq);
-        Vec3 omega = aa.axis() * aa.angle() / dt;
+        Vec3 w = aa.axis() * aa.angle() / dt;// 匀角速度旋转，旋转轴方向不变
 
-        double omega_norm = omega.norm();
-        double angle = omega_norm * dt_future;
+        double w_norm = w.norm();// 角速度，就等于aa.angle() / dt
+        double angle = w_norm * dt_future;// 旋转角度
         Vec3 axis = Vec3::UnitX();
-        if (omega_norm > kMinOmega)
-            axis = omega / omega_norm;
-
+        if (w_norm > kMinW)
+            axis = w / w_norm;// 旋转轴(单位向量)
+        // 如果w_norm太小，说明q1和q2非常接近，那么dq=0，w=0，axis=x轴，angle=0，所以不用旋转
         Quaternion q_future = (q2 * Quaternion(AngleAxis(angle, axis))).normalized();
 
         ISO3 T = ISO3::Identity();
         T.linear() = q_future.toRotationMatrix();
-        T.translation() = trans;
+        T.translation() = trans;// 外推后的齐次变换矩阵
         return T;
     }
 

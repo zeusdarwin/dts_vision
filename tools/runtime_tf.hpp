@@ -18,7 +18,7 @@ namespace dts_vision::tools {
 
 struct LinkBuffer {
     TimePoseBuffer buffer;
-    LinkBuffer(size_t size = 4096): buffer(size) {}
+    LinkBuffer(size_t size = 4096): buffer(size) {}// 初始化缓冲区大小
 };
 
 // ---------------- Edge ----------------
@@ -72,16 +72,14 @@ public:
             }
         }
 
-        buffers_[to_index(parent)][to_index(child)].buffer.push(t, pose_in_parent);
+        buffers_[to_index(parent)][to_index(child)].buffer.push(t, pose_in_parent);// 有锁，存的是T_child2parent
         return true;
     }
 
-    ISO3 pose_a_in_b(FrameEnum a, FrameEnum b, const TimePoint& t) const {
+    ISO3 pose_a_in_b(FrameEnum a, FrameEnum b, const TimePoint& t) const {// T_a2b(a是终点，b是起点)
         if (!valid_frame(a) || !valid_frame(b)) {
             if constexpr (Static) {
-                throw std::out_of_range(
-                    "Invalid TF query " + frame_to_string(a) + " in " + frame_to_string(b)
-                );
+                throw std::out_of_range("Invalid TF query " + frame_to_string(a) + " in " + frame_to_string(b));
             } else {
                 return ISO3::Identity();
             }
@@ -90,38 +88,32 @@ public:
         auto path = find_path(b, a);
         if (!path) {
             if constexpr (Static) {
-                throw std::runtime_error(
-                    "No path from " + frame_to_string(a) + " to " + frame_to_string(b)
-                );
+                throw std::runtime_error("No path from " + frame_to_string(a) + " to " + frame_to_string(b));
             } else {
-                std::cout << "No path from " + frame_to_string(a) + " to " + frame_to_string(b)
-                          << std::endl;
+                std::cout << "No path from " + frame_to_string(a) + " to " + frame_to_string(b) << std::endl;
                 return ISO3::Identity();
             }
         }
 
         ISO3 T = ISO3::Identity();
         for (size_t i = 0; i + 1 < path->size(); ++i) {
-            auto A = (*path)[i];
-            auto B = (*path)[i + 1];
+            auto start = (*path)[i];
+            auto goal = (*path)[i + 1];
 
-            ISO3 t_ab = ISO3::Identity();
-            if (has_direct_edge(A, B)) {
-                t_ab = buffers_[to_index(A)][to_index(B)].buffer.get(t);
-            } else if (has_direct_edge(B, A)) {
-                t_ab = buffers_[to_index(B)][to_index(A)].buffer.get(t).inverse();
+            ISO3 T_a2b = ISO3::Identity();
+            if (has_direct_edge(start, goal)) {
+                T_a2b = buffers_[to_index(start)][to_index(goal)].buffer.get(t);// 按时间戳t获取goal到start的位姿T_goal2start,get有锁
+            } else if (has_direct_edge(goal, start)) {
+                T_a2b = buffers_[to_index(goal)][to_index(start)].buffer.get(t).inverse();
             } else {
                 if constexpr (Static) {
-                    throw std::runtime_error(
-                        "Broken path edge between " + frame_to_string(A) + " and "
-                        + frame_to_string(B)
-                    );
+                    throw std::runtime_error( "Broken path edge between " + frame_to_string(start) + " and " + frame_to_string(goal));
                 } else {
-                    t_ab = ISO3::Identity();
+                    T_a2b = ISO3::Identity();
                 }
             }
 
-            T = T * t_ab;
+            T = T * T_a2b;// 经过T_a2b_1 * T_b_12b_2 * ... * T_b_n2b = T_a2b
         }
         return T;
     }
@@ -131,13 +123,13 @@ public:
     }
 
 private:
-    std::array<std::array<LinkBuffer, N>, N> buffers_;
+    std::array<std::array<LinkBuffer, N>, N> buffers_;// N个坐标系，一个坐标系可以有N个连接，给每一个连接分配一个缓冲区
     std::vector<Edge<FrameEnum>> edges_;// 存储边
-    std::array<std::vector<FrameEnum>, N> adjacency_;
-    std::array<std::array<bool, N>, N> directed_edge_ {};
+    std::array<std::vector<FrameEnum>, N> adjacency_;// N个坐标系，存储各自的连接
+    std::array<std::array<bool, N>, N> directed_edge_ {};// N个坐标系，一个坐标系可以有N个连接，给每一个连接分配一个bool值，表示是否已经建立坐标系联系
     // 坐标系路径缓存，每个std::optional初始化为空状态，第一层std::array放N个起点，第二层std::array放N个std::optional<std::vector<FrameEnum>>，是N条可能存在的路径(因为有N个终点)
     mutable std::array<std::array<std::optional<std::vector<FrameEnum>>, N>, N> path_cache_ {};
-    mutable std::mutex path_cache_mutex_;
+    mutable std::mutex path_cache_mutex_;// 读写锁
 
     bool has_direct_edge(FrameEnum A, FrameEnum B) const {// 判断是否已经建立坐标系联系
         return valid_frame(A) && valid_frame(B) && directed_edge_[to_index(A)][to_index(B)];
@@ -164,31 +156,31 @@ private:
     }
 
     std::optional<std::vector<FrameEnum>> find_path(FrameEnum start, FrameEnum goal) const {
-        std::lock_guard<std::mutex> lock(path_cache_mutex_);
-        auto& cached = path_cache_[to_index(start)][to_index(goal)];
-        if (cached)
-            return cached;
+        std::lock_guard<std::mutex> lock(path_cache_mutex_);// 读写锁，独占
+        auto& path_cached = path_cache_[to_index(start)][to_index(goal)];// 索引是起点终点，看是否已经存在路径
+        if (path_cached)
+            return path_cached;
 
-        std::array<bool, N> visited {};
-        std::array<std::optional<FrameEnum>, N> parent {};
-        std::queue<FrameEnum> q;
+        std::array<bool, N> visited {};// N个坐标系，不可重复走过
+        std::array<std::optional<FrameEnum>, N> path_node {};// N个坐标系，不可重复走过，记录上一个经过的节点
+        std::queue<FrameEnum> frame_enum_queue;
 
-        q.push(start);
-        visited[to_index(start)] = true;
+        frame_enum_queue.push(start);// 将起点加入队列
+        visited[to_index(start)] = true;// 该起点设为已访问
 
-        while (!q.empty()) {
-            auto node = q.front();
-            q.pop();
-            if (node == goal)
+        while (!frame_enum_queue.empty()) {
+            auto node = frame_enum_queue.front();// 取队首元素
+            frame_enum_queue.pop();// 移除队首元素
+            if (node == goal)// 如果当前节点是终点，说明找到了路径
                 break;
 
-            for (auto neighbor: adjacency_[to_index(node)]) {
+            for (auto neighbor: adjacency_[to_index(node)]) {// adjacency_[to_index(node)]是个std::vector<FrameEnum>，放的是当前节点能到达的节点(有边的)
                 auto neighbor_index = to_index(neighbor);
-                if (visited[neighbor_index])
+                if (visited[neighbor_index])// 避免重复访问和反向
                     continue;
-                visited[neighbor_index] = true;
-                parent[neighbor_index] = node;
-                q.push(neighbor);
+                visited[neighbor_index] = true;// 最后一个应该是终点
+                path_node[neighbor_index] = node;// 记录途经的坐标系节点，当前path_node记录的是上一个节点
+                frame_enum_queue.push(neighbor);
             }
         }
 
@@ -196,14 +188,14 @@ private:
             return std::nullopt;
 
         std::vector<FrameEnum> path;
-        for (auto node = goal;; node = *parent[to_index(node)]) {
-            path.push_back(node);
+        for (auto node = goal; ; node = *path_node[to_index(node)]) {// *path_node[to_index(node)]是上一个经过的节点
+            path.push_back(node);// 从终点往回放进路径，因为path_node记录的是上一个节点，得从后往前推
             if (node == start)
                 break;
         }
-        std::reverse(path.begin(), path.end());
-        cached = std::move(path);
-        return cached;
+        std::reverse(path.begin(), path.end());// 反转路径，因为是从终点往回推的
+        path_cached = std::move(path);
+        return path_cached;
     }
 };
 

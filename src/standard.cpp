@@ -85,8 +85,8 @@ std::string SimpleFrame_to_str(int simple_frame) {
                                         "camera", "camera_cv",  "shoot" };
     return std::string(details[simple_frame]);
 }
-std::string SimpleFrame_to_str(SimpleFrame frame) {
-    return SimpleFrame_to_str(std::to_underlying(frame));
+std::string SimpleFrame_to_str(SimpleFrame simple_frame) {
+    return SimpleFrame_to_str(std::to_underlying(simple_frame));
 }
 struct CameraTag {};
 struct SerialTag {};
