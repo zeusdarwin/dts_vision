@@ -122,7 +122,7 @@ struct TaskNode: NodeBase {
         return node;
     }
 
-    void add_downstream(std::type_index tag, Ptr node) override {
+    void add_downstream(std::type_index tag, NodeBase::Ptr node) override {
         if (!node)
             return;
         downstream_by_tag_[tag].push_back(node);// 存指针
