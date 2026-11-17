@@ -146,10 +146,10 @@ struct TaskNode: NodeBase {
             return downstream_all_;
 
         if constexpr (sizeof...(OutputPairs) > 0) {
-            auto outputs = fn_(std::move(*inputs_.value()));
+            auto outputs = fn_(std::move(*inputs_.value_));
             forward_outputs(outputs);
         } else {
-            fn_(std::move(*inputs_.value()));// 移动
+            fn_(std::move(*inputs_.value_));// 移动
         }
 
         inputs_.reset();
