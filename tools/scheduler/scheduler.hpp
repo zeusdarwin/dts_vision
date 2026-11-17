@@ -92,7 +92,7 @@ public:
         static_assert(std::is_convertible_v<Fn, typename SourceNode<OutputPairs...>::Func>, "Fn must match SourceNode::Func");
 
         auto node = SourceNode<OutputPairs...>::create(typename SourceNode<OutputPairs...>::Func(std::forward<Fn>(fn)));
-        node->name = std::move(n);
+        node->name = std::move(name);
 
         connect(node);
 
