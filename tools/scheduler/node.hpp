@@ -29,20 +29,17 @@ template<std::size_t I, typename... Ts>
 using nth_type_t = typename std::tuple_element<I, std::tuple<Ts...>>::type;
 
 template<typename... Ts>
-static std::vector<std::type_index> make_type_index_vec() {
+static std::vector<std::type_index> make_tag_index_vec() {
     return { std::type_index(typeid(Ts))... };
 }
 
 struct NodeBase {
     using Ptr = std::shared_ptr<NodeBase>;
-
-    NodeKind kind { NodeKind::Task };// 节点类型
+    NodeKind kind_ { NodeKind::Task };// 节点类型
     std::string name;
     int connected_count { 0 };
     virtual ~NodeBase() = default;
-
     virtual const std::vector<Ptr>& execute() = 0;
-
     virtual bool receive(std::type_index tag, const void* data, std::type_index value_type) = 0;
     virtual void add_downstream(std::type_index tag, Ptr node) = 0;
     virtual std::vector<std::type_index> input_tags() const = 0;
@@ -52,27 +49,27 @@ struct NodeBase {
 
 template<typename Pair>
 struct Args {
-    using T = typename Pair::second_type;
+    using T = typename Pair::second_type;// 真参数类型
 
-    std::optional<T> value;
+    std::optional<T> value_;
 
-    void write(const T& v) {
-        value = v;
+    void write(const T& value) {
+        value_ = value;
     }
-    void write(T&& v) {
-        value = std::move(v);
+    void write(T&& value) {
+        value_ = std::move(value);
     }
 
     bool has_value() const {
-        return value.has_value();
+        return value_.has_value();
     }
 
     std::optional<T> read() const {
-        return value;
+        return value_;
     }
 
     void reset() {
-        value.reset();
+        value_.reset();
     }
 };
 
@@ -80,21 +77,18 @@ template<typename InputPair, typename... OutputPairs>
 struct TaskNode: NodeBase {
     using InputTag = typename InputPair::first_type;
     using InputType = typename InputPair::second_type;
-    using OutputTuple = std::tuple<std::optional<typename OutputPairs::second_type>...>;
+    using OutputTuple = std::tuple<std::optional<typename OutputPairs::second_type>...>;// 输出类型
+    // std::conditional_t<条件, 条件为true时的类型, 条件为false时的类型>
+    using Func = std::conditional_t<sizeof...(OutputPairs) == 0, std::function<void(InputType&&)>, std::function<OutputTuple(InputType&&)>>;
+    // 如果没有输出类型，则Func类型为void，否则为OutputTuple
+    Func fn_;
+    Args<InputPair> inputs_;// 输入参数
 
-    using Func = std::conditional_t<
-        sizeof...(OutputPairs) == 0,
-        std::function<void(InputType&&)>,
-        std::function<OutputTuple(InputType&&)>>;
-
-    Func fn;
-    Args<InputPair> inputs;
-
-    std::unordered_map<std::type_index, std::vector<NodeBase::Ptr>> downstream_by_tag;
-    std::vector<NodeBase::Ptr> downstream_all;
+    std::unordered_map<std::type_index, std::vector<NodeBase::Ptr>> downstream_by_tag_;
+    std::vector<NodeBase::Ptr> downstream_all_;
 
     TaskNode() {
-        kind = NodeKind::Task;
+        kind_ = NodeKind::Task;
     }
 
     std::vector<std::type_index> input_tags() const override {
@@ -102,28 +96,28 @@ struct TaskNode: NodeBase {
     }
 
     std::vector<std::type_index> output_tags() const override {
-        return make_type_index_vec<typename OutputPairs::first_type...>();
+        return make_tag_index_vec<typename OutputPairs::first_type...>();
     }
 
     NodeBase::Ptr clone() const override {
-        auto node = std::make_shared<TaskNode>(*this);
-        node->downstream_all.clear();
-        node->downstream_by_tag.clear();
-        for (auto& down_node: downstream_by_tag) {
+        auto node = std::make_shared<TaskNode>(*this);// 派生类指针
+        node->downstream_all_.clear();// 清空新node的downstream_all和downstream_by_tag
+        node->downstream_by_tag_.clear();
+        for (auto& down_node: downstream_by_tag_) {
             for (auto& down_node_ptr: down_node.second) {
-                node->add_downstream(down_node.first, down_node_ptr->clone());
+                node->add_downstream(down_node.first, down_node_ptr->clone());// 把旧node的downstream_all和downstream_by_tag克隆到新node中
             }
         }
         return node;
     }
 
     template<typename Fn>
-    static NodeBase::Ptr create(Fn&& fn) {
+    static NodeBase::Ptr create(Fn&& fn) {// 修改fn
         auto node = std::make_shared<TaskNode>();
-        node->fn = std::forward<Fn>(fn);
+        node->fn_ = std::forward<Fn>(fn);
         return node;
     }
-    static NodeBase::Ptr create() {
+    static NodeBase::Ptr create() { // 转移指针所有权
         auto node = std::make_shared<TaskNode>();
         return node;
     }
@@ -131,35 +125,35 @@ struct TaskNode: NodeBase {
     void add_downstream(std::type_index tag, Ptr node) override {
         if (!node)
             return;
-        downstream_by_tag[tag].push_back(node);
-        downstream_all.push_back(std::move(node));
+        downstream_by_tag_[tag].push_back(node);// 存指针
+        downstream_all_.push_back(std::move(node));// 存指针
     }
 
-    bool receive(std::type_index tag, const void* data, std::type_index value_type) override {
-        if (tag != std::type_index(typeid(InputTag)))
+    bool receive(std::type_index input_tag, const void* data, std::type_index input_type) override {
+        if (input_tag != std::type_index(typeid(InputTag)))
             return false;
-        if (value_type != std::type_index(typeid(InputType)))
+        if (input_type != std::type_index(typeid(InputType)))
             return false;
-        if (inputs.has_value())
+        if (inputs_.has_value())
             return false;
 
-        inputs.write(*static_cast<const InputType*>(data));
+        inputs_.write(*static_cast<const InputType*>(data));// 解引用后是const InputType类型的左值，调用的是write(const T& value)，因为data是地址，所以需要解引用
         return true;
     }
 
     const std::vector<NodeBase::Ptr>& execute() override {
-        if (!inputs.has_value())
-            return downstream_all;
+        if (!inputs_.has_value())
+            return downstream_all_;
 
         if constexpr (sizeof...(OutputPairs) > 0) {
-            auto outputs = fn(std::move(*inputs.value));
+            auto outputs = fn_(std::move(*inputs_.value()));
             forward_outputs(outputs);
         } else {
-            fn(std::move(*inputs.value));
+            fn_(std::move(*inputs_.value()));// 移动
         }
 
-        inputs.reset();
-        return downstream_all;
+        inputs_.reset();
+        return downstream_all_;
     }
 
 private:
@@ -168,8 +162,8 @@ private:
         using OutTag = typename Pair::first_type;
         using OutType = typename Pair::second_type;
 
-        auto it = downstream_by_tag.find(std::type_index(typeid(OutTag)));
-        if (it == downstream_by_tag.end())
+        auto it = downstream_by_tag_.find(std::type_index(typeid(OutTag)));
+        if (it == downstream_by_tag_.end())
             return;
 
         for (auto& out: it->second) {
