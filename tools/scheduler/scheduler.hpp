@@ -69,9 +69,6 @@ public:
             throw std::out_of_range("Invalid source snapshot id");
         }
 
-        using NodeT = SourceNode<OutputPairs...>;
-        using FuncT = typename NodeT::Func;
-
         static_assert(
             std::is_convertible_v<Fn, typename SourceNode<OutputPairs...>::Func>,
             "Fn must be convertible to SourceNode::Func"
@@ -91,12 +88,10 @@ public:
             throw std::invalid_argument("rate must be > 0");
         }
 
-        using NodeT = SourceNode<OutputPairs...>;
-        using FuncT = typename NodeT::Func;
+        
+        static_assert(std::is_convertible_v<Fn, typename SourceNode<OutputPairs...>::Func>, "Fn must match SourceNode::Func");
 
-        static_assert(std::is_convertible_v<Fn, FuncT>, "Fn must match SourceNode::Func");
-
-        auto node = NodeT::create(FuncT(std::forward<Fn>(fn)));
+        auto node = SourceNode<OutputPairs...>::create(typename SourceNode<OutputPairs...>::Func(std::forward<Fn>(fn)));
         node->name = std::move(n);
 
         connect(node);
