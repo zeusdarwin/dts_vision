@@ -26,7 +26,7 @@ struct IOPair {
 };
 
 template<std::size_t I, typename... Ts>
-using nth_type_t = typename std::tuple_element<I, std::tuple<Ts...>>::type;
+using nth_type_t = typename std::tuple_element<I, std::tuple<Ts...>>::type;// 获取元组中第I个OutputPairs,是一个IOPair类型
 
 template<typename... Ts>
 static std::vector<std::type_index> make_tag_index_vec() {
@@ -35,7 +35,7 @@ static std::vector<std::type_index> make_tag_index_vec() {
 
 struct NodeBase {
     using Ptr = std::shared_ptr<NodeBase>;
-    NodeKind kind_ { NodeKind::Task };// 节点类型
+    NodeKind kind { NodeKind::Task };// 节点类型
     std::string name;
     int connected_count { 0 };
     virtual ~NodeBase() = default;
@@ -77,18 +77,18 @@ template<typename InputPair, typename... OutputPairs>
 struct TaskNode: NodeBase {
     using InputTag = typename InputPair::first_type;
     using InputType = typename InputPair::second_type;
-    using OutputTuple = std::tuple<std::optional<typename OutputPairs::second_type>...>;// 输出类型
+    using OutputTypeTuple = std::tuple<std::optional<typename OutputPairs::second_type>...>;// 输出类型
     // std::conditional_t<条件, 条件为true时的类型, 条件为false时的类型>
-    using Func = std::conditional_t<sizeof...(OutputPairs) == 0, std::function<void(InputType&&)>, std::function<OutputTuple(InputType&&)>>;
-    // 如果没有输出类型，则Func类型为void，否则为OutputTuple
-    Func fn_;
-    Args<InputPair> inputs_;// 输入参数
+    using Func = std::conditional_t<sizeof...(OutputPairs) == 0, std::function<void(InputType&&)>, std::function<OutputTypeTuple(InputType&&)>>;
+    // 如果没有输出类型，则Func类型为void，否则为OutputTypeTuple/void
+    Func fn;
+    Args<InputPair> inputs;// 输入参数
 
-    std::unordered_map<std::type_index, std::vector<NodeBase::Ptr>> downstream_by_tag_;
-    std::vector<NodeBase::Ptr> downstream_all_;
+    std::unordered_map<std::type_index, std::vector<NodeBase::Ptr>> downstream_by_tag;
+    std::vector<NodeBase::Ptr> downstream_all;
 
     TaskNode() {
-        kind_ = NodeKind::Task;
+        kind = NodeKind::Task;
     }
 
     std::vector<std::type_index> input_tags() const override {
@@ -101,9 +101,9 @@ struct TaskNode: NodeBase {
 
     NodeBase::Ptr clone() const override {
         auto node = std::make_shared<TaskNode>(*this);// 派生类指针
-        node->downstream_all_.clear();// 清空新node的downstream_all和downstream_by_tag
-        node->downstream_by_tag_.clear();
-        for (auto& down_node: downstream_by_tag_) {
+        node->downstream_all.clear();// 清空新node的downstream_all和downstream_by_tag
+        node->downstream_by_tag.clear();
+        for (auto& down_node: downstream_by_tag) {
             for (auto& down_node_ptr: down_node.second) {
                 node->add_downstream(down_node.first, down_node_ptr->clone());// 把旧node的downstream_all和downstream_by_tag克隆到新node中
             }
@@ -112,9 +112,9 @@ struct TaskNode: NodeBase {
     }
 
     template<typename Fn>
-    static NodeBase::Ptr create(Fn&& fn) {// 修改fn
+    static NodeBase::Ptr create(Fn&& fn) {// 传入fn
         auto node = std::make_shared<TaskNode>();
-        node->fn_ = std::forward<Fn>(fn);
+        node->fn = std::forward<Fn>(fn);
         return node;
     }
     static NodeBase::Ptr create() { // 转移指针所有权
@@ -125,57 +125,57 @@ struct TaskNode: NodeBase {
     void add_downstream(std::type_index tag, NodeBase::Ptr node) override {
         if (!node)
             return;
-        downstream_by_tag_[tag].push_back(node);// 存指针
-        downstream_all_.push_back(std::move(node));// 存指针
+        downstream_by_tag[tag].push_back(node);// 存指针
+        downstream_all.push_back(std::move(node));// 存指针
     }
 
-    bool receive(std::type_index input_tag, const void* data, std::type_index input_type) override {
-        if (input_tag != std::type_index(typeid(InputTag)))
+    bool receive(std::type_index OutputTag, const void* data, std::type_index OutputType) override {
+        if (OutputTag != std::type_index(typeid(InputTag)))
             return false;
-        if (input_type != std::type_index(typeid(InputType)))
+        if (OutputType != std::type_index(typeid(InputType)))// 输入输出类型匹不匹配
             return false;
-        if (inputs_.has_value())
+        if (inputs.has_value())// 每次接收新输入
             return false;
 
-        inputs_.write(*static_cast<const InputType*>(data));// 解引用后是const InputType类型的左值，调用的是write(const T& value)，因为data是地址，所以需要解引用
+        inputs.write(*static_cast<const InputType*>(data));// 解引用后是const InputType类型的左值，调用的是write(const T& value)，因为data是地址，所以需要解引用
         return true;
     }
 
     const std::vector<NodeBase::Ptr>& execute() override {
-        if (!inputs_.has_value())
-            return downstream_all_;
+        if (!inputs.has_value())
+            return downstream_all;
 
         if constexpr (sizeof...(OutputPairs) > 0) {
-            auto outputs = fn_(std::move(*inputs_.value_));
+            auto outputs = fn(std::move(*inputs.value_));
             forward_outputs(outputs);
         } else {
-            fn_(std::move(*inputs_.value_));// 移动
+            fn(std::move(*inputs.value_));// 把输入移动给任务函数
         }
 
-        inputs_.reset();
-        return downstream_all_;
+        inputs.reset();// 清空输入，以便下次接收新的输入
+        return downstream_all;// 返回所有下游节点
     }
 
 private:
     template<typename Pair, typename V>
     void send_one(const V& v) {
-        using OutTag = typename Pair::first_type;
-        using OutType = typename Pair::second_type;
+        using OutputTag = typename Pair::first_type;
+        using OutputType = typename Pair::second_type;
 
-        auto it = downstream_by_tag_.find(std::type_index(typeid(OutTag)));
-        if (it == downstream_by_tag_.end())
+        auto it = downstream_by_tag.find(std::type_index(typeid(OutputTag)));
+        if (it == downstream_by_tag.end())// 没有找到
             return;
 
-        for (auto& out: it->second) {
+        for (auto& out: it->second) {// 遍历哈希表的值std::vector<NodeBase::Ptr>
             if (out) {
-                out->receive(std::type_index(typeid(OutTag)), &v, std::type_index(typeid(OutType)));
+                out->receive(std::type_index(typeid(OutputTag)), &v, std::type_index(typeid(OutputType)));// 把Out和Input可以匹配的节点的输出参数写入输出参数
             }
         }
     }
 
     template<std::size_t... I>
-    void forward_outputs_impl(OutputTuple& outputs, std::index_sequence<I...>) {
-        (dispatch_one<nth_type_t<I, OutputPairs...>>(std::get<I>(outputs)), ...);
+    void forward_outputs(OutputTypeTuple& outputs, std::index_sequence<I...>) {
+        (dispatch_one<nth_type_t<I, OutputPairs...>>(std::get<I>(outputs)), ...); // 依次调用dispatch_one，把outputs里的值写入inputs里，实际只能写入一个，因为只有一个输入参数，只有一个匹配
     }
 
     template<typename Pair>
@@ -185,18 +185,15 @@ private:
         send_one<Pair>(*out);
     }
 
-    void forward_outputs(OutputTuple& outputs) {
-        forward_outputs_impl(outputs, std::make_index_sequence<sizeof...(OutputPairs)> {});
+    void forward_outputs(OutputTypeTuple& outputs) {
+        forward_outputs(outputs, std::make_index_sequence<sizeof...(OutputPairs)> {});
     }
 };
 
 template<typename... OutputPairs>
 struct SourceNode: NodeBase {
-    using OutputTuple = std::tuple<std::optional<typename OutputPairs::second_type>...>;
-    using Func = std::conditional_t<
-        sizeof...(OutputPairs) == 0,
-        std::function<void()>,
-        std::function<OutputTuple()>>;
+    using OutputTypeTuple = std::tuple<std::optional<typename OutputPairs::second_type>...>;
+    using Func = std::conditional_t<sizeof...(OutputPairs) == 0, std::function<void()>, std::function<OutputTypeTuple()>>;
 
     Func fn;
 
@@ -219,7 +216,7 @@ struct SourceNode: NodeBase {
     }
     template<typename F>
     bool runtime_set_fn(F&& f) {
-        if constexpr (std::is_convertible_v<F, Func>) {
+        if constexpr (std::is_convertible_v<F, Func>) {// 判断类型Fn能否隐式转换为Func类型
             fn = std::forward<F>(f);
             return true;
         }
@@ -255,7 +252,7 @@ struct SourceNode: NodeBase {
     }
 
     std::vector<std::type_index> output_tags() const override {
-        return make_type_index_vec<typename OutputPairs::first_type...>();
+        return make_tag_index_vec<typename OutputPairs::first_type...>();
     }
 
     const std::vector<NodeBase::Ptr>& execute() override {
@@ -271,22 +268,22 @@ struct SourceNode: NodeBase {
 private:
     template<typename Pair, typename V>
     void send_one(const V& v) {
-        using OutTag = typename Pair::first_type;
-        using OutType = typename Pair::second_type;
+        using OutputTag = typename Pair::first_type;
+        using OutputType = typename Pair::second_type;
 
-        auto it = downstream_by_tag.find(std::type_index(typeid(OutTag)));
+        auto it = downstream_by_tag.find(std::type_index(typeid(OutputTag)));
         if (it == downstream_by_tag.end())
             return;
 
         for (auto& out: it->second) {
             if (out) {
-                out->receive(std::type_index(typeid(OutTag)), &v, std::type_index(typeid(OutType)));
+                out->receive(std::type_index(typeid(OutputTag)), &v, std::type_index(typeid(OutputType)));// 什么都不做
             }
         }
     }
 
     template<std::size_t... I>
-    void forward_outputs_impl(OutputTuple& outputs, std::index_sequence<I...>) {
+    void forward_outputs(OutputTypeTuple& outputs, std::index_sequence<I...>) {
         (dispatch_one<nth_type_t<I, OutputPairs...>>(std::get<I>(outputs)), ...);
     }
 
@@ -299,8 +296,8 @@ private:
         send_one<Pair>(*out);
     }
 
-    void forward_outputs(OutputTuple& outputs) {
-        forward_outputs_impl(outputs, std::make_index_sequence<sizeof...(OutputPairs)> {});
+    void forward_outputs(OutputTypeTuple& outputs) {
+        forward_outputs(outputs, std::make_index_sequence<sizeof...(OutputPairs)> {});
     }
 };
 

@@ -225,6 +225,7 @@ int main(int argc, char** argv) {
     auto_aim::ArmorTracker armor_tracker(config["armor_tracker"]);
     armor_tracker.set_sentry(true);
     auto_aim::AutoAimFsm auto_aim_fsm(config["auto_aim_fsm"]);
+    const bool armor_omni_enabled = config["armor_omni"]["enable"].as<bool>(false);
     auto_aim::ArmorOmni armor_omni(config["armor_omni"]);
     auto_aim::ArmorAimer armor_aimer(config["armor_aimer"]);
     auto_buff::RuneDetector rune_detector(config["rune_detector"]);
@@ -235,16 +236,18 @@ int main(int argc, char** argv) {
     tools::SWMR<auto_aim::ArmorTarget> armor_target;
     tools::SWMR<auto_aim::ArmorTarget> omni_target;
     tools::SWMR<auto_buff::RuneTarget> rune_target;
-    armor_omni.emplace_one(
-        config["armor_omni"]["camera0"],
-        std::to_underlying(SentryFrame::OMNI0),
-        std::to_underlying(SentryFrame::OMNI0_CV)
-    );
-    armor_omni.emplace_one(
-        config["armor_omni"]["camera1"],
-        std::to_underlying(SentryFrame::OMNI1),
-        std::to_underlying(SentryFrame::OMNI1_CV)
-    );
+    if (armor_omni_enabled) {
+        armor_omni.emplace_one(
+            config["armor_omni"]["camera0"],
+            std::to_underlying(SentryFrame::OMNI0),
+            std::to_underlying(SentryFrame::OMNI0_CV)
+        );
+        armor_omni.emplace_one(
+            config["armor_omni"]["camera1"],
+            std::to_underlying(SentryFrame::OMNI1),
+            std::to_underlying(SentryFrame::OMNI1_CV)
+        );
+    }
     BulletReappear bullet_reappear(config["common"]);
     LogCtx log_ctx;
     std::optional<VisionDebugCtx> dbg;
@@ -821,6 +824,9 @@ int main(int argc, char** argv) {
     });
     auto armor_omni_task = scheduler.register_source<>("armor_omni");
     scheduler.add_rate_source<>("armor_omni_trigger", armor_omni.fps_, [&]() {
+        if (!armor_omni_enabled) {
+            return;
+        }
         if (navigation_enabled && !navigation_feedback_fresh()) {
             return;
         }

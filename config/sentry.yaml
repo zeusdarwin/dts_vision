@@ -313,6 +313,7 @@ rune_aimer:
     compenstator_type: resistance
 
 armor_omni:
+  enable: true
   fps: 60.0
   max_infer_num: 3
   armor_detector:

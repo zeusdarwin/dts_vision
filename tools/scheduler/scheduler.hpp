@@ -25,32 +25,32 @@ public:
     using clock = std::chrono::steady_clock;
     inline static unsigned int hardware_concurrency_ = std::thread::hardware_concurrency();// 当前系统支持的硬件线程数
 
-    explicit Scheduler(size_t threads = hardware_concurrency_):
+    explicit Scheduler(size_t threads = hardware_concurrency_): // 构造函数
         worker_count_(threads ? threads : 1),
-        arena_(static_cast<int>(worker_count_)) {}
+        arena_(static_cast<int>(worker_count_)) {} // 最大并发数为硬件线程数
 
     ~Scheduler() {
-        stop();
+        stop();// 析构rate_threads_和group_
     }
 
     template<typename InputPair, typename... OutputPairs, typename Fn>
-    void register_task(std::string n, Fn&& fn) {
+    void register_task(std::string name, Fn&& fn) {
         auto node = TaskNode<InputPair, OutputPairs...>::create(std::forward<Fn>(fn));
-        node->name = std::move(n);
+        node->name = std::move(name);
 
-        auto inputs = node->input_tags();
-        if (inputs.empty()) {
+        auto input_tags = node->input_tags();
+        if (input_tags.empty()) {
             throw std::runtime_error("Task must have input");
         }
 
-        static_tasks_snapshot_[inputs.front()].push_back(node);
+        static_tasks_snapshot_[input_tags.front()].push_back(node);// 键是输入tag，值是节点指针
         built_ = false;
     }
 
     template<typename... OutputPairs>
-    [[nodiscard]] size_t register_source(std::string n) {
+    [[nodiscard]] size_t register_source(std::string name) {
         auto node = SourceNode<OutputPairs...>::create();
-        node->name = std::move(n);
+        node->name = std::move(name);
 
         source_snapshot_.push_back(node);
         built_ = false;
@@ -62,7 +62,7 @@ public:
         if (!built_)
             build();
 
-        if (!is_running())
+        if (!is_running())// 如果调度器没有运行，直接返回
             return;
 
         if (snap_id >= source_snapshot_.size()) {
@@ -73,20 +73,20 @@ public:
         using FuncT = typename NodeT::Func;
 
         static_assert(
-            std::is_convertible_v<Fn, FuncT>,
+            std::is_convertible_v<Fn, typename SourceNode<OutputPairs...>::Func>,
             "Fn must be convertible to SourceNode::Func"
         );
 
-        auto& base = source_snapshot_[snap_id];
-        auto local = base->clone();
-        auto source = std::static_pointer_cast<NodeT>(local);
-        source->fn = FuncT(std::forward<Fn>(fn));
+        auto& base_node_ptr = source_snapshot_[snap_id];
+        auto local_ptr = base_node_ptr->clone();// 克隆一个新的节点，避免多线程访问同一个节点导致数据竞争，也避免修改原始节点
+        auto source_node_ptr = std::static_pointer_cast<SourceNode<OutputPairs...>>(local_ptr);// 转换为SourceNode类型的智能指针
+        source_node_ptr->fn = typename SourceNode<OutputPairs...>::Func(std::forward<Fn>(fn));
 
-        schedule(local);
+        schedule(local_ptr);// 把process_queue加入线程池
     }
 
     template<typename... OutputPairs, typename Fn>
-    void add_rate_source(std::string n, double rate, Fn&& fn) {
+    void add_rate_source(std::string name, double rate, Fn&& fn) {
         if (rate <= 0.0) {
             throw std::invalid_argument("rate must be > 0");
         }
@@ -137,17 +137,18 @@ public:
     }
 
     void stop() {
-        if (!running_.exchange(false, std::memory_order_acq_rel))
+        // !true->stop(), !false->return
+        if (!running_.exchange(false, std::memory_order_acq_rel))// 防止多个线程进入stop()，多次执行下面的group_.cancel()和group_.wait()。这不仅浪费性能，某些并发场景下甚至会因为重复操作导致死锁或崩溃
             return;
 
-        for (auto& t: rate_threads_) {
-            if (t.joinable())
-                t.request_stop();
+        for (auto& jthread_: rate_threads_) {
+            if (jthread_.joinable())
+                jthread_.request_stop();
         }
         rate_threads_.clear();
 
-        group_.cancel();
-        group_.wait();
+        group_.cancel();// 阻止新的任务继续被捞出来执行，让系统的负载尽快降下来
+        group_.wait();// 等待所有任务执行完毕，注意这里可能会阻塞很久，因为有些任务可能会被阻塞在外部资源上，比如网络IO、串口IO等
 
         DTS_INFO("dts_vision Scheduler stopped");
     }
@@ -168,7 +169,7 @@ public:
 
         for (auto& [_, nodes]: static_tasks_snapshot_) {
             for (auto& node: nodes) {
-                if (node->connected_count == 0) {
+                if (node->connected_count == 0) {// 如果节点没有下游节点，说明它是孤立的
                     throw std::runtime_error("Node '" + node->name + "' is isolated");
                 }
             }
@@ -178,7 +179,7 @@ public:
     }
 
     bool is_running() const {
-        return running_.load(std::memory_order_acquire);
+        return running_.load(std::memory_order_acquire);// 原子读取
     }
 
 private:
@@ -193,14 +194,12 @@ private:
 
         {
             std::lock_guard<std::mutex> lock(queue_mutex_);
-            task_queue_.push(node);
+            task_queue_.push(node);// 指针队列
         }
 
         // Submit work through the bounded arena so Scheduler tasks cannot
         // expand to TBB's process-wide worker limit.
-        arena_.execute([this] {
-            group_.run([this] { process_queue(); });
-        });
+        arena_.execute([this] {group_.run([this] { process_queue(); });});
     }
 
     void process_queue() {
@@ -221,14 +220,14 @@ private:
 
     void connect(NodeBase::Ptr node) {
         for (auto& tag: node->output_tags()) {
-            auto it = static_tasks_snapshot_.find(tag);
-            if (it == static_tasks_snapshot_.end())
+            auto it = static_tasks_snapshot_.find(tag);// 找tag对应的哈希表
+            if (it == static_tasks_snapshot_.end())// 没有找到
                 continue;
 
-            for (auto& d: it->second) {
+            for (auto& ptr: it->second) {// 遍历tag对应的哈希表的值(指针列表)
                 node->connected_count++;
-                d->connected_count++;
-                node->add_downstream(tag, d->clone());
+                ptr->connected_count++;// 每个节点都记录了有多少个下游节点，这样在build()时可以判断是否有孤立的节点
+                node->add_downstream(tag, ptr->clone());// 多态类不能直接拷贝，只能转移指针所有权
             }
         }
     }
