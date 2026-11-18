@@ -207,9 +207,9 @@ private:
             task_queue_.pop();
         }
 
-        const auto& next = node->execute();
-        for (auto& n: next) {
-            schedule(n);
+        const auto& next_node = node->execute();
+        for (auto& node: next_node) {
+            schedule(node);
         }
     }
 
