@@ -114,9 +114,9 @@ public:
                 while (!st.stop_requested() && running_.load(std::memory_order_acquire)) {
                     next_time += period;
 
-                    const auto& next = w.node->execute();
-                    for (auto& n: next) {
-                        schedule(n);
+                    const auto& next_node = rate_worker.node->execute();
+                    for (auto& node: next_node) {
+                        schedule(node);
                     }
 
                     auto now = clock::now();
