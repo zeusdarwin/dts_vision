@@ -214,15 +214,15 @@ private:
     }
 
     void connect(NodeBase::Ptr node) {
-        for (auto& tag: node->output_tags()) {
-            auto it = static_tasks_snapshot_.find(tag);// 找tag对应的哈希表
+        for (auto& output_tag: node->output_tags()) {
+            auto it = static_tasks_snapshot_.find(output_tag);// 找tag对应的哈希表
             if (it == static_tasks_snapshot_.end())// 没有找到
                 continue;
 
             for (auto& ptr: it->second) {// 遍历tag对应的哈希表的值(指针列表)
                 node->connected_count++;
                 ptr->connected_count++;// 每个节点都记录了有多少个下游节点，这样在build()时可以判断是否有孤立的节点
-                node->add_downstream(tag, ptr->clone());// 多态类不能直接拷贝，只能转移指针所有权
+                node->add_downstream(output_tag, ptr->clone());// 多态类不能直接拷贝，只能转移指针所有权
             }
         }
     }
