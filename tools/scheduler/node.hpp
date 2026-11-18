@@ -84,8 +84,8 @@ struct TaskNode: NodeBase {
     Func fn;
     Args<InputPair> inputs;// 输入参数
 
-    std::unordered_map<std::type_index, std::vector<NodeBase::Ptr>> downstream_by_tag;
-    std::vector<NodeBase::Ptr> downstream_all;
+    std::unordered_map<std::type_index, std::vector<NodeBase::Ptr>> downstream_by_tag;// 有tag标记的下流节点
+    std::vector<NodeBase::Ptr> downstream_all;// 所有下流节点
 
     TaskNode() {
         kind = NodeKind::Task;
