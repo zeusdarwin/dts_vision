@@ -103,10 +103,10 @@ public:
         if (running_.exchange(true, std::memory_order_acq_rel))
             return;
 
-        for (auto& w: rate_workers_) {
-            rate_threads_.emplace_back([this, w](std::stop_token st) {
+        for (auto& rate_worker: rate_workers_) {
+            rate_threads_.emplace_back([this, rate_worker](std::stop_token st) {
                 const auto period = std::chrono::duration_cast<clock::duration>(
-                    std::chrono::duration<double>(1.0 / w.rate)
+                    std::chrono::duration<double>(1.0 / rate_worker.rate)
                 );
 
                 auto next_time = clock::now();
